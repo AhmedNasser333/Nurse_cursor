@@ -63,7 +63,8 @@ jobs:
       - name: Install Buildozer toolchain
         run: |
           python -m pip install --upgrade pip
-          pip install Cython buildozer
+          # pyjnius in p4a currently requires Cython 0.29.x (Cython 3 breaks with "long").
+          pip install "Cython<3" buildozer
 
       - name: Ensure LBF landmark model
         run: |
