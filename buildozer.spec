@@ -17,7 +17,12 @@ android.api = 33
 android.minapi = 24
 android.ndk = 25b
 android.accept_sdk_license = True
+# One ABI = less RAM/time on CI (covers nearly all phones since ~2019).
+android.archs = arm64-v8a
 
 [buildozer]
 log_level = 2
 warn_on_root = 1
+
+# Align contrib with main OpenCV (see p4a_recipes/opencv_extras).
+p4a.local_recipes = ./p4a_recipes

@@ -1,17 +1,14 @@
-# Build the Android APK with Buildozer on Ubuntu (same idea as local Linux/WSL).
+# Build the Android APK with Buildozer on Ubuntu.
 #
 # Notes:
-# - First run can take 1–3+ hours (downloads NDK/SDK, compiles OpenCV + extras).
-# - Re-runs are faster if the cache hits (~/.buildozer and ./.buildozer).
-# - Standard GitHub-hosted runners have ~7 GB RAM; if the job dies with OOM,
-#   try a larger runner (org setting) or reduce parallel compile (see env below).
-# - Trigger: Actions tab → this workflow → Run workflow.
+# - opencv vs opencv_extras version mismatch in upstream p4a is fixed via ./p4a_recipes.
+# - First run can take 1–2+ hours; cache helps on re-runs.
+# - Trigger: Actions → Build Android APK → Run workflow.
 
 name: Build Android APK
 
 on:
   workflow_dispatch:
-  # Uncomment to build on every push to main (uses many CI minutes):
   # push:
   #   branches: [main]
 
@@ -23,8 +20,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Slightly reduce parallel native builds to lower peak RAM on default runners.
   MAKEFLAGS: -j2
+  # Use Node 24 for Actions (avoids Node 20 deprecation on runner).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -33,12 +31,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+
+      - name: Add swap (reduces OOM during OpenCV compile)
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 8G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=8192
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
 
       - name: Install system dependencies
         run: |
@@ -61,20 +68,23 @@ jobs:
           test -f lbfmodel.yaml || python download_lbf_model.py
 
       - name: Cache Buildozer downloads and build trees
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.buildozer
             .buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'p4a_recipes/opencv_extras/__init__.py') }}
           restore-keys: |
             buildozer-${{ runner.os }}-
 
       - name: Build APK (debug)
-        run: buildozer android debug
+        run: |
+          # Runner predefines NDK paths; unset so p4a uses Buildozer’s NDK only.
+          unset ANDROID_NDK ANDROID_NDK_HOME ANDROID_NDK_ROOT || true
+          buildozer android debug
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: eyecontrol-debug-apk
           path: bin/*.apk
